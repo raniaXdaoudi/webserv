@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebServ - Gestionnaire de Fichiers</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --background-color: #f5f6fa;
+            --card-background: #ffffff;
+            --text-color: #2c3e50;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+            background: var(--primary-color);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: var(--card-background);
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: var(--primary-color);
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--secondary-color);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+
+        .file-list {
+            list-style: none;
+        }
+
+        .file-list li {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-list li:last-child {
+            border-bottom: none;
+        }
+
+        .file-list a {
+            color: var(--secondary-color);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .file-list a:hover {
+            color: var(--primary-color);
+        }
+
+        .status-message {
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>WebServ</h1>
+            <p>Gestionnaire de Fichiers Web</p>
+        </header>
+
+        <div class="card">
+            <h2>Téléverser un Fichier</h2>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="filename">Nom du fichier</label>
+                    <input type="text" id="filename" class="form-control" placeholder="Exemple: document.txt" required>
+                </div>
+                <div class="form-group">
+                    <label for="content">Contenu du fichier</label>
+                    <textarea id="content" class="form-control" rows="6" placeholder="Entrez le contenu de votre fichier ici..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Téléverser</button>
+            </form>
+            <div id="uploadStatus" class="status-message"></div>
+        </div>
+
+        <div class="card">
+            <h2>Supprimer un Fichier</h2>
+            <form id="deleteForm">
+                <div class="form-group">
+                    <label for="deletePath">Chemin du fichier</label>
+                    <input type="text" id="deletePath" class="form-control" placeholder="Exemple: /document.txt" required>
+                </div>
+                <button type="button" class="btn btn-danger" onclick="deleteFile()">Supprimer</button>
+            </form>
+            <div id="deleteStatus" class="status-message"></div>
+        </div>
+
+        <div class="card">
+            <h2>Fichiers Disponibles</h2>
+            <ul class="file-list">
+                <li><a href="/test.html">Page de test</a></li>
+                <li><a href="/cgi-test.html">Page de test CGI</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function showStatus(elementId, message, isSuccess) {
+            const statusElement = document.getElementById(elementId);
+            statusElement.textContent = message;
+            statusElement.className = 'status-message ' + (isSuccess ? 'success' : 'error');
+            statusElement.style.display = 'block';
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 5000);
+        }
+
+        document.getElementById('uploadForm').onsubmit = function(e) {
+            e.preventDefault();
+            const filename = document.getElementById('filename').value;
+            const content = document.getElementById('content').value;
+            
+            if (!filename) {
+                showStatus('uploadStatus', 'Veuillez spécifier un nom de fichier', false);
+                return;
+            }
+
+            const path = filename.startsWith('/') ? filename : '/' + filename;
+
+            fetch(path, {
+                method: 'POST',
+                body: content,
+                headers: {
+                    'Content-Type': 'text/plain'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    showStatus('uploadStatus', 'Fichier créé avec succès', true);
+                    document.getElementById('deletePath').value = path;
+                } else {
+                    showStatus('uploadStatus', 'Erreur lors de la création: ' + response.status, false);
+                }
+            })
+            .catch(error => {
+                showStatus('uploadStatus', 'Erreur: ' + error, false);
+            });
+        };
+
+        function deleteFile() {
+            const path = document.getElementById('deletePath').value;
+            
+            fetch(path, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    showStatus('deleteStatus', 'Fichier supprimé avec succès', true);
+                } else {
+                    showStatus('deleteStatus', 'Erreur lors de la suppression: ' + response.status, false);
+                }
+            })
+            .catch(error => {
+                showStatus('deleteStatus', 'Erreur: ' + error, false);
+            });
+        }
+    </script>
+</body>
+</html> 

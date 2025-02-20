@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Test CGI - GET et POST</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        h2 {
+            color: #666;
+            margin-top: 20px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test des Méthodes CGI</h1>
+
+    <div class="container">
+        <h2>Test GET</h2>
+        <form action="/cgi-bin/test.py" method="GET">
+            <div>
+                <label for="name_get">Nom:</label>
+                <input type="text" id="name_get" name="name" placeholder="Votre nom">
+            </div>
+            <div>
+                <label for="age_get">Âge:</label>
+                <input type="text" id="age_get" name="age" placeholder="Votre âge">
+            </div>
+            <button type="submit">Envoyer (GET)</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Test POST</h2>
+        <form action="/cgi-bin/test.py" method="POST">
+            <div>
+                <label for="name_post">Nom:</label>
+                <input type="text" id="name_post" name="name" placeholder="Votre nom">
+            </div>
+            <div>
+                <label for="age_post">Âge:</label>
+                <input type="text" id="age_post" name="age" placeholder="Votre âge">
+            </div>
+            <button type="submit">Envoyer (POST)</button>
+        </form>
+    </div>
+</body>
+</html> 
