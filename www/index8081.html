@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>WebServ Port 8081</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+	<style>
+		.test-section { margin-bottom: 2rem; padding: 1rem; border-radius: 8px; background: #f8f9fa; }
+		.response-display { background: #212529; color: #fff; padding: 1rem; border-radius: 4px; min-height: 100px; margin-top: 1rem; }
+		.error-message { background: #dc3545; color: #fff; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
+	</style>
+</head>
+<body>
+	<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+		<div class="container">
+			<a class="navbar-brand" href="/">WebServ Port 8081</a>
+		</div>
+	</nav>
+
+	<div class="container my-5">
+		<div class="row">
+			<div class="col-12">
+				<h1 class="mb-4">Interface de Test WebServ - Serveur Secondaire</h1>
+				<div class="alert alert-warning">
+					<strong>Attention :</strong> Ce serveur fonctionne sur le port 8081 et a des fonctionnalités limitées par rapport au serveur principal.
+					Les fonctionnalités non disponibles afficheront un message d'erreur explicite.
+				</div>
+			</div>
+		</div>
+
+		<!-- Test GET -->
+		<div class="test-section">
+			<h3>Test GET</h3>
+			<div class="mb-3">
+				<input type="text" class="form-control" id="getPath" value="/files/" placeholder="Chemin">
+				<button class="btn btn-primary mt-2" onclick="testGet()">Tester GET</button>
+			</div>
+			<div class="response-display" id="getResponse"></div>
+		</div>
+
+		<!-- Traitement des fichiers temporaires (non disponible) -->
+		<div class="test-section">
+			<h3>Traitement des fichiers temporaires</h3>
+			<div class="mb-3">
+				<p>Cliquez sur le bouton ci-dessous pour traiter les fichiers temporaires d'upload.</p>
+				<button class="btn btn-secondary mt-2" onclick="showUnavailableFeature('processTempFiles')">Traiter les fichiers temporaires</button>
+			</div>
+			<div class="response-display" id="processResponse"></div>
+		</div>
+
+		<!-- Test POST (Upload) (non disponible) -->
+		<div class="test-section">
+			<h3>Test POST (Upload)</h3>
+			<form id="uploadForm" class="mb-3" onsubmit="event.preventDefault(); showUnavailableFeature('upload');">
+				<input type="file" class="form-control" id="fileUpload">
+				<button type="submit" class="btn btn-secondary mt-2">Upload</button>
+			</form>
+			<div class="response-display" id="postResponse"></div>
+		</div>
+
+		<!-- Test DELETE (non disponible) -->
+		<div class="test-section">
+			<h3>Test DELETE</h3>
+			<div class="mb-3">
+				<input type="text" class="form-control" id="deletePath" placeholder="Chemin du fichier à supprimer">
+				<button class="btn btn-secondary mt-2" onclick="showUnavailableFeature('delete')">Supprimer</button>
+			</div>
+			<div class="response-display" id="deleteResponse"></div>
+		</div>
+
+		<!-- Fonctionnalités non disponibles -->
+		<div class="test-section bg-light">
+			<h3>Informations sur les fonctionnalités limitées</h3>
+			<ul class="list-group">
+				<li class="list-group-item list-group-item-warning">Upload de fichiers (POST) - Non disponible sur ce serveur</li>
+				<li class="list-group-item list-group-item-warning">Suppression de fichiers (DELETE) - Non disponible sur ce serveur</li>
+				<li class="list-group-item list-group-item-warning">Exécution de scripts CGI - Non disponible sur ce serveur</li>
+				<li class="list-group-item list-group-item-warning">Traitement de fichiers temporaires - Non disponible sur ce serveur</li>
+				<li class="list-group-item list-group-item-warning">Création de fichiers statiques - Non disponible sur ce serveur</li>
+			</ul>
+			<div class="mt-3">
+				<p>Pour accéder à toutes les fonctionnalités, veuillez utiliser le serveur principal sur le port 8080.</p>
+				<a href="http://127.0.0.1:8080" class="btn btn-outline-primary">Aller au serveur principal</a>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		async function displayResponse(response, elementId) {
+			const display = document.getElementById(elementId);
+			try {
+				const text = await response.text();
+				display.innerHTML = `Status: ${response.status} ${response.statusText}\n\n${text}`;
+			} catch (error) {
+				display.innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		async function testGet() {
+			const path = document.getElementById('getPath').value;
+			try {
+				const response = await fetch(path);
+				await displayResponse(response, 'getResponse');
+			} catch (error) {
+				document.getElementById('getResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		function showUnavailableFeature(featureType) {
+			let message = '';
+			let elementId = '';
+
+			switch(featureType) {
+				case 'processTempFiles':
+					message = 'Erreur 405: Méthode non autorisée\n\nLe traitement des fichiers temporaires n\'est pas disponible sur le port 8081.\nVeuillez utiliser le serveur principal sur le port 8080.';
+					elementId = 'processResponse';
+					break;
+				case 'upload':
+					message = 'Erreur 405: Méthode non autorisée\n\nL\'upload de fichiers (POST) n\'est pas disponible sur le port 8081.\nVeuillez utiliser le serveur principal sur le port 8080.';
+					elementId = 'postResponse';
+					break;
+				case 'delete':
+					message = 'Erreur 405: Méthode non autorisée\n\nLa suppression de fichiers (DELETE) n\'est pas disponible sur le port 8081.\nVeuillez utiliser le serveur principal sur le port 8080.';
+					elementId = 'deleteResponse';
+					break;
+				default:
+					message = 'Erreur 405: Méthode non autorisée\n\nCette fonctionnalité n\'est pas disponible sur le port 8081.\nVeuillez utiliser le serveur principal sur le port 8080.';
+					elementId = 'getResponse';
+			}
+
+			document.getElementById(elementId).innerHTML = message;
+		}
+	</script>
+</body>
+</html>

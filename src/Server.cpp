@@ -1,393 +1,503 @@
-#include "Server.hpp"
-#include "Request.hpp"
-#include "Response.hpp"
-#include "HttpMethod.hpp"
-#include <errno.h>
-#include <string.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: rania <rania@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/01/31 12:15:17 by rania             #+#    #+#             */
+/*   Updated: 2025/03/05 14:24:47 by rania            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 
-Server::Server(const ServerConfig& config) 
-    : _socket_fd(-1), _port(config.port), _file_handler(config.root), 
-      _config(config), _cgi_handler(config.root + "/cgi-bin"), _session_manager() {}
+#include "../include/Server.hpp"
+#include "../include/Request.hpp"
+#include "../include/Response.hpp"
+#include "../include/Connection.hpp"
+#include "../include/Logger.hpp"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <iostream>
+#include <algorithm>
+#include <sys/stat.h>
+#include <sstream>
+#include <cstring>
+#include <time.h>
+
+std::string getCurrentTimestamp() {
+	time_t now = time(0);
+	struct tm *timeinfo = localtime(&now);
+	char buffer[80];
+	strftime(buffer, sizeof(buffer), "[%Y-%m-%d %H:%M:%S]", timeinfo);
+	return std::string(buffer);
+}
+
+Server* Server::_instance = NULL;
+
+Server::Server(ConfigParser& config) : _config(config), _running(false) {
+	initializeServerSockets();
+}
 
 Server::~Server() {
-    stop();
+	if (_instance == this) {
+		_instance = NULL;
+	}
+	for (std::map<int, Connection*>::iterator it = _connections.begin(); it != _connections.end(); ++it) {
+		delete it->second;
+	}
+	_connections.clear();
+
+	for (std::vector<int>::iterator it = _serverSockets.begin(); it != _serverSockets.end(); ++it) {
+		close(*it);
+	}
+	_serverSockets.clear();
 }
 
-Response Server::handleError(int error_code) {
-    std::string error_code_str;
-    std::ostringstream ss;
-    ss << error_code;
-    error_code_str = ss.str();
+void Server::initializeServerSockets() {
+	const std::vector<ServerConfig>& servers = _config.getServers();
+	if (servers.empty()) {
+		throw std::runtime_error("Aucun serveur configuré");
+	}
 
-    // Messages d'erreur selon la RFC 2068
-    std::string error_message;
-    switch (error_code) {
-        case 400: error_message = "Bad Request"; break;
-        case 401: error_message = "Unauthorized"; break;
-        case 402: error_message = "Payment Required"; break;
-        case 403: error_message = "Forbidden"; break;
-        case 404: error_message = "Not Found"; break;
-        case 405: error_message = "Method Not Allowed"; break;
-        case 406: error_message = "Not Acceptable"; break;
-        case 407: error_message = "Proxy Authentication Required"; break;
-        case 408: error_message = "Request Timeout"; break;
-        case 409: error_message = "Conflict"; break;
-        case 410: error_message = "Gone"; break;
-        case 411: error_message = "Length Required"; break;
-        case 412: error_message = "Precondition Failed"; break;
-        case 413: error_message = "Request Entity Too Large"; break;
-        case 414: error_message = "Request-URI Too Long"; break;
-        case 415: error_message = "Unsupported Media Type"; break;
-        case 500: error_message = "Internal Server Error"; break;
-        case 501: error_message = "Not Implemented"; break;
-        case 502: error_message = "Bad Gateway"; break;
-        case 503: error_message = "Service Unavailable"; break;
-        case 504: error_message = "Gateway Timeout"; break;
-        case 505: error_message = "HTTP Version Not Supported"; break;
-        default: error_message = "Unknown Error"; break;
-    }
 
-    std::map<std::string, std::string>::const_iterator it = _config.error_pages.find(error_code_str);
-    if (it != _config.error_pages.end()) {
-        std::string content;
-        std::string mime_type;
-        std::string error_page_path = it->second;
-        if (error_page_path[0] != '/') {
-            error_page_path = "/" + error_page_path;
-        }
-        if (_file_handler.readFile(error_page_path, content, mime_type)) {
-            Response response;
-            response.setStatus(error_code, error_message);
-            response.setHeader("Content-Type", mime_type);
-            response.setBody(content);
-            return response;
-        }
-    }
+	for (std::vector<ServerConfig>::const_iterator it = servers.begin(); it != servers.end(); ++it) {
 
-    // Page d'erreur par défaut si la page personnalisée n'est pas trouvée
-    Response response;
-    response.setStatus(error_code, error_message);
-    response.setHeader("Content-Type", "text/html");
-    std::ostringstream body;
-    body << "<html><head><title>" << error_code << " " << error_message << "</title></head>";
-    body << "<body><h1>" << error_code << " " << error_message << "</h1></body></html>";
-    response.setBody(body.str());
-    return response;
+		int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+		if (serverSocket < 0) {
+			throw std::runtime_error("Erreur lors de la création du socket");
+		}
+
+		try {
+			setupNonBlocking(serverSocket);
+		} catch (const std::exception& e) {
+			close(serverSocket);
+			throw;
+		}
+
+		int opt = 1;
+		if (setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+			close(serverSocket);
+			throw std::runtime_error("Erreur setsockopt");
+		}
+
+		struct sockaddr_in serverAddr;
+		serverAddr.sin_family = AF_INET;
+		serverAddr.sin_addr.s_addr = INADDR_ANY;
+		serverAddr.sin_port = htons(it->port);
+
+		if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+			close(serverSocket);
+			throw std::runtime_error("Erreur bind sur le port " + std::to_string(it->port));
+		}
+
+		if (listen(serverSocket, SOMAXCONN) < 0) {
+			close(serverSocket);
+			throw std::runtime_error("Erreur listen");
+		}
+
+		_serverSockets.push_back(serverSocket);
+		_serverConfigs[serverSocket] = &(*it);
+	}
 }
 
-Response Server::handleRedirection(const std::string& path) {
-    std::map<std::string, std::string>::const_iterator it = _config.redirections.find(path);
-    if (it != _config.redirections.end()) {
-        Response response;
-        response.setStatus(301, "Moved Permanently");
-        std::string location = it->second;
-        if (location[0] != '/') {
-            location = "/" + location;
-        }
-        response.setHeader("Location", location);
-        return response;
-    }
-    return handleError(404);
+void Server::start() {
+	_running = true;
+	std::vector<struct pollfd> fds;
+	bool priorityToRead = true;  
+
+	std::cout << getCurrentTimestamp() << " [INFO] Webserv starting..." << std::endl;
+
+	for (std::vector<int>::iterator it = _serverSockets.begin(); it != _serverSockets.end(); ++it) {
+		const ServerConfig* config = _serverConfigs[*it];
+		if (config) {
+			std::cout << getCurrentTimestamp() << " [INFO] Listening on 0.0.0.0:" << config->port << std::endl;
+		}
+	}
+	std::cout << getCurrentTimestamp() << " [INFO] Configuration loaded from config/webserv.conf" << std::endl;
+
+	while (_running) {
+		fds.clear();
+
+		
+		for (std::vector<int>::iterator it = _serverSockets.begin(); it != _serverSockets.end(); ++it) {
+			struct pollfd pfd;
+			pfd.fd = *it;
+			pfd.events = POLLIN;
+			fds.push_back(pfd);
+		}
+
+		
+		for (std::map<int, Connection*>::iterator it = _connections.begin(); it != _connections.end(); ++it) {
+			struct pollfd pfd;
+			pfd.fd = it->first;
+			pfd.events = POLLIN | POLLOUT;
+			fds.push_back(pfd);
+		}
+
+		
+		if (poll(&fds[0], fds.size(), 30000) < 0) {
+			if (!_running) break;
+			continue;
+		}
+
+		
+		time_t currentTime = time(NULL);
+		std::map<int, Connection*>::iterator it = _connections.begin();
+		while (it != _connections.end()) {
+			if (currentTime - it->second->getLastActivityTime() > 30) {
+				std::cout << getCurrentTimestamp() << " [TIMEOUT] Connection " << it->first << " fermée pour inactivité" << std::endl;
+				removeConnection(it->first);
+				it = _connections.begin();
+			} else {
+				++it;
+			}
+		}
+
+		
+		for (size_t i = 0; i < fds.size(); ++i) {
+			if (fds[i].revents == 0) continue;
+
+			
+			bool isServerSocket = false;
+			for (std::vector<int>::iterator it = _serverSockets.begin(); it != _serverSockets.end(); ++it) {
+				if (fds[i].fd == *it) {
+					isServerSocket = true;
+					if (fds[i].revents & POLLIN) {
+						handleNewConnection(*it);
+					}
+					break;
+				}
+			}
+
+			if (!isServerSocket && _connections.find(fds[i].fd) != _connections.end()) {
+				Connection* conn = _connections[fds[i].fd];
+
+				
+				if (fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+					removeConnection(fds[i].fd);
+					continue;
+				}
+
+				
+				if (priorityToRead && (fds[i].revents & POLLIN)) {
+					try {
+						handleClientRead(conn);
+					} catch (const std::exception& e) {
+						std::cerr << getCurrentTimestamp() << " [ERROR] Erreur lecture client: " << e.what() << std::endl;
+						removeConnection(fds[i].fd);
+					}
+				}
+				else if (!priorityToRead && (fds[i].revents & POLLOUT) && !conn->getWriteBuffer().empty()) {
+					try {
+						handleClientWrite(conn);
+					} catch (const std::exception& e) {
+						std::cerr << getCurrentTimestamp() << " [ERROR] Erreur écriture client: " << e.what() << std::endl;
+						removeConnection(fds[i].fd);
+					}
+				}
+			}
+		}
+
+		
+		priorityToRead = !priorityToRead;
+	}
+
+	
+	for (std::map<int, Connection*>::iterator it = _connections.begin(); it != _connections.end(); ++it) {
+		delete it->second;
+	}
+	_connections.clear();
+
+	for (std::vector<int>::iterator it = _serverSockets.begin(); it != _serverSockets.end(); ++it) {
+		close(*it);
+	}
+	_serverSockets.clear();
 }
 
-Response Server::handleCGI(const Request& request, const std::string& path) {
-    // Extraire le chemin sans les paramètres query string pour le fichier
-    size_t pos = path.find('?');
-    std::string script_path = (pos != std::string::npos) ? path.substr(0, pos) : path;
-    
-    // Exécuter le CGI avec le chemin complet (incluant les paramètres)
-    return _cgi_handler.executeCGI(request, _file_handler.getRootDir() + script_path);
+void Server::handleClientData(Connection* conn) {
+	try {
+		Request request(conn->getBuffer(), _config);
+		std::string url = request.getUrl();
+		std::string host = request.getHeader("Host");
+
+
+		const ServerConfig* serverConfig = findMatchingServer(conn->getSocket(), host);
+		if (!serverConfig) {
+			std::cout << getCurrentTimestamp() << " [ERROR] Pas de serveur trouvé pour l'hôte: " << host << std::endl;
+			Response response(conn, "", _config, request);
+			response.handleError(404);
+			return;
+		}
+
+		std::string root = (host == "api.127.0.0.1") ? "www/api" : "www";
+		std::string fullPath = root + url;
+
+
+		const Route* currentRoute = _config.findRoute(serverConfig, url);
+		if (!currentRoute) {
+			std::cout << getCurrentTimestamp() << " [ERROR] Pas de route trouvée pour: " << url << std::endl;
+			Response response(conn, "", _config, request);
+			response.handleError(404);
+			return;
+		}
+
+		std::string method = request.getMethod();
+		if (!currentRoute->isMethodAllowed(method)) {
+			std::cout << getCurrentTimestamp() << " [ERROR] Méthode non autorisée: " << method << std::endl;
+			Response response(conn, "", _config, request);
+			response.handleError(405);
+			return;
+		}
+
+		if (url == "/") {
+			fullPath = root + "/" + currentRoute->getIndexFile();
+		}
+
+		Response response(conn, fullPath, _config, request);
+		if (method == "GET") {
+			response.handleGetRequest();
+		} else if (method == "POST") {
+			response.handlePostRequest(request.getBody());
+		} else if (method == "DELETE") {
+			handleDeleteRequest(conn->getSocket(), request);
+		}
+
+		conn->clearBuffer();
+
+	} catch (const std::exception& e) {
+		std::cout << getCurrentTimestamp() << " [ERROR] Exception lors du traitement de la requête: "
+				  << e.what() << std::endl;
+
+		Response response(conn, "", _config, Request());
+		response.handleError(500);
+	} catch (...) {
+		std::cout << getCurrentTimestamp() << " [ERROR] Exception inconnue lors du traitement de la requête"
+				  << std::endl;
+
+		Response response(conn, "", _config, Request());
+		response.handleError(500);
+	}
 }
 
-Response Server::handleRequest(const Request& request) {
-    // Format de log RFC 2068: remotehost rfc931 authuser [date] "request" status bytes
-    std::cout << request.getClientIP() << " - - [";
-    time_t now = time(0);
-    struct tm tm = *gmtime(&now);
-    char date[100];
-    strftime(date, sizeof(date), "%d/%b/%Y:%H:%M:%S %z", &tm);
-    std::cout << date << "] \"" << request.getMethod() << " " << request.getPath() 
-              << " " << request.getVersion() << "\" ";
+void Server::setupNonBlocking(int socket) {
+	int flags = fcntl(socket, F_GETFL, 0);
+	if (flags < 0) {
+		throw std::runtime_error("Erreur configuration socket non-bloquant");
+	}
 
-    Response response = processRequest(request);
-
-    // Compléter le log avec le status et la taille
-    std::cout << response.getStatus() << " " << response.getBody().length() << std::endl;
-
-    return response;
+	if (fcntl(socket, F_SETFL, flags | O_NONBLOCK) < 0) {
+		throw std::runtime_error("Erreur configuration socket non-bloquant");
+	}
 }
 
-bool Server::init() {
-    _socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (_socket_fd < 0) {
-        return false;
-    }
+void Server::handleNewConnection(int serverSocket) {
+	struct sockaddr_in clientAddr;
+	socklen_t clientLen = sizeof(clientAddr);
 
-    // Configuration du socket comme non-bloquant
-    int flags = fcntl(_socket_fd, F_GETFL, 0);
-    if (flags == -1 || fcntl(_socket_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-        stop();
-        return false;
-    }
+	int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientLen);
+	if (clientSocket < 0) {
+		return;
+	}
 
-    // Configuration des options du socket selon RFC 2068
-    int opt = 1;
-    if (setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        stop();
-        return false;
-    }
-
-    // Timeout selon RFC 2068 section 8.1.4 (Keep-Alive)
-    struct timeval timeout;
-    timeout.tv_sec = 15;  // 15 secondes selon la RFC
-    timeout.tv_usec = 0;
-    if (setsockopt(_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0 ||
-        setsockopt(_socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
-        stop();
-        return false;
-    }
-
-    _address.sin_family = AF_INET;
-    _address.sin_addr.s_addr = INADDR_ANY;
-    _address.sin_port = htons(_port);
-
-    if (bind(_socket_fd, (struct sockaddr *)&_address, sizeof(_address)) < 0) {
-        stop();
-        return false;
-    }
-
-    // RFC 2068 recommande une file d'attente suffisamment grande
-    if (listen(_socket_fd, SOMAXCONN) < 0) {
-        stop();
-        return false;
-    }
-
-    return true;
+	try {
+		setupNonBlocking(clientSocket);
+		Connection* conn = new Connection(clientSocket, _config);
+		conn->setServerSocket(serverSocket);
+		_connections[clientSocket] = conn;
+	} catch (const std::exception& e) {
+		close(clientSocket);
+		std::cerr << getCurrentTimestamp() << " [ERROR] Erreur lors de l'acceptation de la connexion: " << e.what() << std::endl;
+	}
 }
 
-void Server::run() {
-    fd_set master_set, working_set;
-    struct timeval timeout;
-    int max_fd = _socket_fd;
-    std::map<int, std::string> client_buffers;
+void Server::handleClientRead(Connection* conn) {
+	char buffer[4096];
+	ssize_t bytesRead = recv(conn->getSocket(), buffer, sizeof(buffer) - 1, 0);
 
-    FD_ZERO(&master_set);
-    FD_SET(_socket_fd, &master_set);
+	if (bytesRead <= 0) {
+		removeConnection(conn->getSocket());
+		return;
+	}
 
-    std::cout << "Serveur en écoute sur le port " << _port << std::endl;
+	buffer[bytesRead] = '\0';
+	std::string newData(buffer, bytesRead);
 
-    while (true) {
-        working_set = master_set;
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
+	
+	conn->appendToBuffer(newData);
 
-        int activity = select(max_fd + 1, &working_set, NULL, NULL, &timeout);
-        if (activity < 0) {
-            if (errno != EINTR) {
-                std::cerr << "Erreur lors du select: " << strerror(errno) << std::endl;
-            }
-            continue;
-        }
+	
+	std::string currentBuffer = conn->getBuffer();
 
-        // Vérifier les nouvelles connexions
-        if (FD_ISSET(_socket_fd, &working_set)) {
-            struct sockaddr_in client_address;
-            socklen_t addrlen = sizeof(client_address);
-            
-            int new_socket = accept(_socket_fd, (struct sockaddr *)&client_address, &addrlen);
-            if (new_socket < 0) {
-                if (errno != EWOULDBLOCK && errno != EAGAIN) {
-                    std::cerr << "Erreur lors de l'acceptation de la connexion: " << strerror(errno) << std::endl;
-                }
-                continue;
-            }
+	
+	size_t headerEnd = currentBuffer.find("\r\n\r\n");
+	if (headerEnd == std::string::npos) {
+		return;
+	}
 
-            // Configurer le nouveau socket comme non-bloquant
-            int flags = fcntl(new_socket, F_GETFL, 0);
-            if (flags >= 0) {
-                fcntl(new_socket, F_SETFL, flags | O_NONBLOCK);
-            }
+	
+	std::string headers = currentBuffer.substr(0, headerEnd);
+	size_t contentLengthPos = headers.find("Content-Length: ");
+	if (contentLengthPos != std::string::npos) {
+		size_t endOfLine = headers.find("\r\n", contentLengthPos);
+		std::string contentLengthStr = headers.substr(contentLengthPos + 16, endOfLine - (contentLengthPos + 16));
+		size_t expectedLength = std::stoul(contentLengthStr);
 
-            // Ajouter le nouveau socket au set
-            FD_SET(new_socket, &master_set);
-            if (new_socket > max_fd) {
-                max_fd = new_socket;
-            }
+		
+		const ServerConfig* serverConfig = findMatchingServer(conn->getSocket(), "");
+		if (serverConfig && expectedLength > serverConfig->client_max_body_size) {
+			Response response(conn, "", _config, Request());
+			response.handleError(413);
+			conn->clearBuffer();
+			return;
+		}
 
-            client_buffers[new_socket] = "";
-            continue;
-        }
+		size_t currentBodyLength = currentBuffer.length() - (headerEnd + 4);
 
-        // Gérer les données des clients existants
-        for (int i = 0; i <= max_fd; i++) {
-            if (i != _socket_fd && FD_ISSET(i, &working_set)) {
-                char buffer[4096] = {0};
-                ssize_t bytes_read = read(i, buffer, sizeof(buffer) - 1);
+		
+		if (currentBodyLength < expectedLength) {
+			return;
+		}
+	}
 
-                if (bytes_read < 0) {
-                    if (errno != EWOULDBLOCK && errno != EAGAIN) {
-                        close(i);
-                        FD_CLR(i, &master_set);
-                        client_buffers.erase(i);
-                    }
-                    continue;
-                }
-                else if (bytes_read == 0) {
-                    // Connexion fermée par le client
-                    close(i);
-                    FD_CLR(i, &master_set);
-                    client_buffers.erase(i);
-                    continue;
-                }
+	
+	try {
+		handleClientData(conn);
+	} catch (const std::exception& e) {
+		std::cerr << getCurrentTimestamp() << " [ERROR] Erreur lors du traitement de la requête: " << e.what() << std::endl;
+		removeConnection(conn->getSocket());
+		return;
+	}
 
-                buffer[bytes_read] = '\0';
-                client_buffers[i] += buffer;
-
-                // Vérifier si nous avons une requête complète
-                if (client_buffers[i].find("\r\n\r\n") != std::string::npos) {
-                    Request request;
-                    Response response;
-
-                    if (request.parse(client_buffers[i])) {
-                        // Obtenir l'IP du client
-                        struct sockaddr_in addr;
-                        socklen_t addr_len = sizeof(addr);
-                        getpeername(i, (struct sockaddr*)&addr, &addr_len);
-                        char client_ip[INET_ADDRSTRLEN];
-                        inet_ntop(AF_INET, &(addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-                        request.setClientIP(client_ip);
-
-                        response = handleRequest(request);
-                    } else {
-                        response = handleError(400);
-                    }
-
-                    std::string response_str = response.toString();
-                    ssize_t total_sent = 0;
-                    while (total_sent < static_cast<ssize_t>(response_str.length())) {
-                        ssize_t sent = send(i, response_str.c_str() + total_sent, 
-                                          response_str.length() - total_sent, 0);
-                        if (sent < 0) {
-                            if (errno != EWOULDBLOCK && errno != EAGAIN) {
-                                break;
-                            }
-                            continue;
-                        }
-                        total_sent += sent;
-                    }
-
-                    // Fermer la connexion après avoir envoyé la réponse
-                    close(i);
-                    FD_CLR(i, &master_set);
-                    client_buffers.erase(i);
-                }
-            }
-        }
-
-        // Mettre à jour max_fd si nécessaire
-        while (max_fd > 0 && !FD_ISSET(max_fd, &master_set)) {
-            max_fd--;
-        }
-    }
+	
+	conn->clearBuffer();
 }
 
-void Server::stop() {
-    if (_socket_fd >= 0) {
-        // RFC 2068 Section 8.1.4 - Fermeture propre des connexions
-        shutdown(_socket_fd, SHUT_RDWR);
-        close(_socket_fd);
-        _socket_fd = -1;
-    }
+void Server::handleClientWrite(Connection* conn) {
+	const std::string& writeBuffer = conn->getWriteBuffer();
+	if (writeBuffer.empty()) {
+		return;
+	}
+
+	ssize_t bytesSent = send(conn->getSocket(), writeBuffer.c_str(), writeBuffer.length(), 0);
+	if (bytesSent <= 0) {
+		removeConnection(conn->getSocket());
+		return;
+	}
+
+	if (static_cast<size_t>(bytesSent) < writeBuffer.length()) {
+		conn->clearWriteBuffer();
+		conn->appendToWriteBuffer(writeBuffer.substr(bytesSent));
+	} else {
+		conn->clearWriteBuffer();
+	}
 }
 
-Response Server::processRequest(const Request& request) {
-    // RFC 2068 Section 5.1.1 - Vérification de la version HTTP
-    if (request.getVersion() != "HTTP/1.1") {
-        return handleError(505);
-    }
+void Server::removeConnection(int socket) {
+	std::cout << getCurrentTimestamp() << " [INFO] Connection closed: " << socket << std::endl;
 
-    _session_manager.updateSession(request);
+	std::map<int, Connection*>::iterator it = _connections.find(socket);
+	if (it != _connections.end()) {
+		delete it->second;
+		_connections.erase(it);
+	}
+	close(socket);
+}
 
-    // RFC 2068 Section 5.1.2 - Vérification de l'URI
-    if (request.getPath().length() > 8000) { // Limite raisonnable selon la RFC
-        return handleError(414);
-    }
+const ServerConfig* Server::findMatchingServer(int socket, const std::string& hostHeader) const {
+	
+	if (!hostHeader.empty()) {
+	}
 
-    // Redirection
-    std::map<std::string, std::string>::const_iterator redirect_it = _config.redirections.find(request.getPath());
-    if (redirect_it != _config.redirections.end()) {
-        return handleRedirection(request.getPath());
-    }
+	
+	std::map<int, Connection*>::const_iterator conn_it = _connections.find(socket);
+	if (conn_it == _connections.end()) {
+		if (!hostHeader.empty()) {
+			std::cout << getCurrentTimestamp() << " [ERROR] Aucune connexion trouvée pour le socket " << socket << std::endl;
+		}
+		return NULL;
+	}
 
-    // RFC 2068 Section 5.1.1 - Vérification des méthodes
-    const std::string& method = request.getMethod();
-    bool method_allowed = false;
-    for (std::vector<std::string>::const_iterator it = _config.allowed_methods.begin();
-         it != _config.allowed_methods.end(); ++it) {
-        if (*it == method) {
-            method_allowed = true;
-            break;
-        }
-    }
-    if (!method_allowed) {
-        Response response = handleError(405);
-        // RFC 2068 Section 10.4.6 - Allow header obligatoire pour 405
-        std::string allowed_methods;
-        for (std::vector<std::string>::const_iterator it = _config.allowed_methods.begin();
-             it != _config.allowed_methods.end(); ++it) {
-            if (it != _config.allowed_methods.begin()) {
-                allowed_methods += ", ";
-            }
-            allowed_methods += *it;
-        }
-        response.setHeader("Allow", allowed_methods);
-        return response;
-    }
+	
+	int serverSocket = conn_it->second->getServerSocket();
+	std::map<int, const ServerConfig*>::const_iterator it = _serverConfigs.find(serverSocket);
+	if (it == _serverConfigs.end()) {
+		if (!hostHeader.empty()) {
+			std::cout << getCurrentTimestamp() << " [ERROR] Aucun serveur trouvé pour le socket serveur " << serverSocket << std::endl;
+		}
+		return NULL;
+	}
 
-    if (method == "POST") {
-        if (request.getHeader("Content-Length").empty()) {
-            return handleError(411);
-        }
-        if (request.getBody().length() > _config.client_max_body_size) {
-            return handleError(413);
-        }
-    }
+	
+	std::string host = hostHeader;
+	size_t pos = host.find(':');
+	if (pos != std::string::npos) {
+		host = host.substr(0, pos);
+	}
 
-    // CGI
-    if (_cgi_handler.isCGIScript(request.getPath())) {
-        return handleCGI(request, request.getFullPath());
-    }
 
-    // Traitement des méthodes selon RFC 2068 Section 9
-    Response response;
-    try {
-        if (method == "GET") {
-            response = HttpMethod::handleGet(request, _file_handler);
-            if (response.getStatus() == 404) {
-                return handleError(404);
-            }
-        }
-        else if (method == "POST") {
-            response = HttpMethod::handlePost(request, _file_handler);
-        }
-        else if (method == "DELETE") {
-            response = HttpMethod::handleDelete(request, _file_handler);
-        }
-        else {
-            return handleError(501);
-        }
-    } catch (...) {
-        return handleError(500);
-    }
+	
+	const std::vector<std::string>& server_names = it->second->server_names;
+	for (std::vector<std::string>::const_iterator name_it = server_names.begin();
+		 name_it != server_names.end(); ++name_it) {
+		if (*name_it == host) {
+			return it->second;
+		}
+	}
+	return it->second;
+}
 
-    // RFC 2068 Section 14.18 - Date header obligatoire
-    char date[1000];
-    time_t now = time(0);
-    struct tm tm = *gmtime(&now);
-    strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S GMT", &tm);
-    response.setHeader("Date", date);
+void Server::handleDeleteRequest(int clientSocket, Request &request) {
+	Connection* tempConn = _connections[clientSocket];
+	const ServerConfig* serverConfig = findMatchingServer(clientSocket, request.getHeader("Host"));
+	if (!serverConfig) {
+		Response response(tempConn, "", _config, request);
+		response.handleError(404);
+		return;
+	}
 
-    return response;
-} 
+	std::string path = request.getUrl();
+	std::string fullPath = "www" + path;
+
+	struct stat path_stat;
+	stat(fullPath.c_str(), &path_stat);
+	if (S_ISDIR(path_stat.st_mode)) {
+		Response response(tempConn, "", _config, request);
+		response.handleError(403);  
+		return;
+	}
+
+	const Route* route = _config.findRoute(serverConfig, path);
+	if (route && !route->isMethodAllowed("DELETE")) {
+		Response response(tempConn, "", _config, request);
+		response.handleError(405);  
+		return;
+	}
+
+	if (unlink(fullPath.c_str()) == 0) {
+		Response response(tempConn, "", _config, request);
+		response.sendResponse(204, "text/plain");
+	} else {
+		Response response(tempConn, "", _config, request);
+		response.handleError(404);
+	}
+}
+
+void Server::handleCGI(int clientSocket, const std::string& scriptPath, const Request& request) {
+	Response response(_connections[clientSocket], scriptPath, _config, request);
+	response.handleCgiRequest();
+}
+
+void Server::handleGetRequest(int clientSocket, Request& request) {
+	Connection* conn = _connections[clientSocket];
+	Response response(conn, "", _config, request);
+	response.handleGetRequest();
+}
+
+void Server::handlePostRequest(int clientSocket, Request& request) {
+	Connection* conn = _connections[clientSocket];
+	Response response(conn, "", _config, request);
+	response.handlePostRequest(request.getBody());
+}

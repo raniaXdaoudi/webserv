@@ -1,292 +1,209 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebServ - Gestionnaire de Fichiers</title>
-    <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --success-color: #2ecc71;
-            --danger-color: #e74c3c;
-            --background-color: #f5f6fa;
-            --card-background: #ffffff;
-            --text-color: #2c3e50;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            background-color: var(--background-color);
-            color: var(--text-color);
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
-            padding: 2rem 0;
-            background: var(--primary-color);
-            color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .card {
-            background: var(--card-background);
-            border-radius: 10px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-        }
-
-        .card h2 {
-            color: var(--primary-color);
-            margin-bottom: 1.5rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid var(--secondary-color);
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--primary-color);
-            font-weight: 500;
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 0.8rem;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--secondary-color);
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 0.8rem 1.5rem;
-            border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background-color: var(--secondary-color);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background-color: #2980b9;
-        }
-
-        .btn-danger {
-            background-color: var(--danger-color);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background-color: #c0392b;
-        }
-
-        .file-list {
-            list-style: none;
-        }
-
-        .file-list li {
-            padding: 1rem;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            align-items: center;
-        }
-
-        .file-list li:last-child {
-            border-bottom: none;
-        }
-
-        .file-list a {
-            color: var(--secondary-color);
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
-
-        .file-list a:hover {
-            color: var(--primary-color);
-        }
-
-        .status-message {
-            padding: 1rem;
-            margin: 1rem 0;
-            border-radius: 5px;
-            display: none;
-        }
-
-        .status-message.success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .status-message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .card {
-                padding: 1.5rem;
-            }
-        }
-    </style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>WebServ Testeur</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+	<style>
+		.test-section { margin-bottom: 2rem; padding: 1rem; border-radius: 8px; background: #f8f9fa; }
+		.response-display { background: #212529; color: #fff; padding: 1rem; border-radius: 4px; min-height: 100px; margin-top: 1rem; }
+	</style>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1>WebServ</h1>
-            <p>Gestionnaire de Fichiers Web</p>
-        </header>
+	<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+		<div class="container">
+			<a class="navbar-brand" href="/">WebServ Testeur</a>
+		</div>
+	</nav>
 
-        <div class="card">
-            <h2>Téléverser un Fichier</h2>
-            <form id="uploadForm">
-                <div class="form-group">
-                    <label for="filename">Nom du fichier</label>
-                    <input type="text" id="filename" class="form-control" placeholder="Exemple: document.txt" required>
-                </div>
-                <div class="form-group">
-                    <label for="content">Contenu du fichier</label>
-                    <textarea id="content" class="form-control" rows="6" placeholder="Entrez le contenu de votre fichier ici..." required></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary">Téléverser</button>
-            </form>
-            <div id="uploadStatus" class="status-message"></div>
-        </div>
+	<div class="container my-5">
+		<div class="row">
+			<div class="col-12">
+				<h1 class="mb-4">Interface de Test WebServ</h1>
+			</div>
+		</div>
 
-        <div class="card">
-            <h2>Supprimer un Fichier</h2>
-            <form id="deleteForm">
-                <div class="form-group">
-                    <label for="deletePath">Chemin du fichier</label>
-                    <input type="text" id="deletePath" class="form-control" placeholder="Exemple: /document.txt" required>
-                </div>
-                <button type="button" class="btn btn-danger" onclick="deleteFile()">Supprimer</button>
-            </form>
-            <div id="deleteStatus" class="status-message"></div>
-        </div>
+		<!-- Test GET -->
+		<div class="test-section">
+			<h3>Test GET</h3>
+			<div class="mb-3">
+				<input type="text" class="form-control" id="getPath" value="/files/" placeholder="Chemin">
+				<button class="btn btn-primary mt-2" onclick="testGet()">Tester GET</button>
+			</div>
+			<div class="response-display" id="getResponse"></div>
+		</div>
 
-        <div class="card">
-            <h2>Fichiers Disponibles</h2>
-            <ul class="file-list">
-                <li><a href="/test.html">Page de test</a></li>
-                <li><a href="/cgi-test.html">Page de test CGI</a></li>
-            </ul>
-        </div>
-    </div>
+		<!-- Test POST (Upload) -->
+		<div class="test-section">
+			<h3>Test POST (Upload)</h3>
+			<form id="uploadForm" class="mb-3">
+				<input type="file" class="form-control" id="fileUpload">
+				<button type="submit" class="btn btn-primary mt-2">Upload</button>
+			</form>
+			<div class="response-display" id="postResponse"></div>
+		</div>
 
-    <script>
-        function showStatus(elementId, message, isSuccess) {
-            const statusElement = document.getElementById(elementId);
-            statusElement.textContent = message;
-            statusElement.className = 'status-message ' + (isSuccess ? 'success' : 'error');
-            statusElement.style.display = 'block';
-            setTimeout(() => {
-                statusElement.style.display = 'none';
-            }, 5000);
-        }
+		<!-- Traitement des fichiers temporaires -->
+		<div class="test-section">
+			<h3>Traitement des fichiers temporaires</h3>
+			<div class="mb-3">
+				<p>Cliquez sur le bouton ci-dessous pour traiter les fichiers temporaires d'upload et extraire leur contenu sans les en-têtes multipart.</p>
+				<button class="btn btn-success" onclick="processTempFiles()">Traiter les fichiers temporaires</button>
+			</div>
+			<div class="response-display" id="processResponse"></div>
+		</div>
 
-        document.getElementById('uploadForm').onsubmit = function(e) {
-            e.preventDefault();
-            const filename = document.getElementById('filename').value;
-            const content = document.getElementById('content').value;
-            
-            if (!filename) {
-                showStatus('uploadStatus', 'Veuillez spécifier un nom de fichier', false);
-                return;
-            }
+		<!-- Création de fichier statique -->
+		<div class="test-section">
+			<h3>Créer un fichier statique</h3>
+			<form id="staticFileForm" class="mb-3">
+				<div class="mb-3">
+					<label for="fileName" class="form-label">Nom du fichier</label>
+					<input type="text" class="form-control" id="fileName" required placeholder="exemple.txt">
+				</div>
+				<div class="mb-3">
+					<label for="fileContent" class="form-label">Contenu du fichier</label>
+					<textarea class="form-control" id="fileContent" rows="5" required placeholder="Écrivez le contenu ici..."></textarea>
+				</div>
+				<button type="submit" class="btn btn-success">Créer le fichier</button>
+			</form>
+			<div class="response-display" id="staticFileResponse"></div>
+		</div>
 
-            const path = filename.startsWith('/') ? filename : '/' + filename;
+		<!-- Test DELETE -->
+		<div class="test-section">
+			<h3>Test DELETE</h3>
+			<div class="mb-3">
+				<input type="text" class="form-control" id="deletePath" placeholder="Chemin du fichier à supprimer">
+				<button class="btn btn-danger mt-2" onclick="testDelete()">Supprimer</button>
+			</div>
+			<div class="response-display" id="deleteResponse"></div>
+		</div>
 
-            fetch(path, {
-                method: 'POST',
-                body: content,
-                headers: {
-                    'Content-Type': 'text/plain'
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    showStatus('uploadStatus', 'Fichier créé avec succès', true);
-                    document.getElementById('deletePath').value = path;
-                } else {
-                    showStatus('uploadStatus', 'Erreur lors de la création: ' + response.status, false);
-                }
-            })
-            .catch(error => {
-                showStatus('uploadStatus', 'Erreur: ' + error, false);
-            });
-        };
+		<!-- Test CGI -->
+		<div class="test-section">
+			<h3>Test CGI</h3>
+			<div class="mb-3">
+				<select class="form-control" id="cgiScript">
+					<option value="/cgi-bin/test.py">test.py</option>
+					<option value="/cgi-bin/error.py">error.py</option>
+					<option value="/cgi-bin/infinite.py">infinite.py</option>
+					<option value="/cgi-bin/upload_handler.py">upload_handler.py</option>
+				</select>
+				<button class="btn btn-primary mt-2" onclick="testCGI()">Exécuter CGI</button>
+			</div>
+			<div class="response-display" id="cgiResponse"></div>
+		</div>
 
-        function deleteFile() {
-            const path = document.getElementById('deletePath').value;
-            
-            fetch(path, {
-                method: 'DELETE'
-            })
-            .then(response => {
-                if (response.ok) {
-                    showStatus('deleteStatus', 'Fichier supprimé avec succès', true);
-                } else {
-                    showStatus('deleteStatus', 'Erreur lors de la suppression: ' + response.status, false);
-                }
-            })
-            .catch(error => {
-                showStatus('deleteStatus', 'Erreur: ' + error, false);
-            });
-        }
-    </script>
+		<!-- Test Redirection -->
+		<div class="test-section">
+			<h3>Test Redirection</h3>
+			<div class="mb-3">
+				<button class="btn btn-primary" onclick="testRedirect()">Tester Redirection</button>
+			</div>
+			<div class="response-display" id="redirectResponse"></div>
+		</div>
+	</div>
+
+	<script>
+		async function displayResponse(response, elementId) {
+			const display = document.getElementById(elementId);
+			try {
+				const text = await response.text();
+				display.innerHTML = `Status: ${response.status} ${response.statusText}\n\n${text}`;
+			} catch (error) {
+				display.innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		async function testGet() {
+			const path = document.getElementById('getPath').value;
+			try {
+				const response = await fetch(path);
+				await displayResponse(response, 'getResponse');
+			} catch (error) {
+				document.getElementById('getResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		document.getElementById('uploadForm').onsubmit = async (e) => {
+			e.preventDefault();
+			const file = document.getElementById('fileUpload').files[0];
+			if (!file) return;
+
+			const formData = new FormData();
+			formData.append('file', file);
+
+			try {
+				const response = await fetch('/upload/cgi/', {
+					method: 'POST',
+					body: formData
+				});
+				await displayResponse(response, 'postResponse');
+			} catch (error) {
+				document.getElementById('postResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		};
+
+		async function processTempFiles() {
+			try {
+				const response = await fetch('/cgi-bin/process_temp_upload.py', {
+					method: 'GET'
+				});
+				await displayResponse(response, 'processResponse');
+			} catch (error) {
+				document.getElementById('processResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		document.getElementById('staticFileForm').onsubmit = async (e) => {
+			e.preventDefault();
+			const fileName = document.getElementById('fileName').value;
+			const content = document.getElementById('fileContent').value;
+
+			try {
+				const response = await fetch('/upload/static/' + fileName, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'text/plain'
+					},
+					body: content
+				});
+				await displayResponse(response, 'staticFileResponse');
+			} catch (error) {
+				document.getElementById('staticFileResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		};
+
+		async function testDelete() {
+			const path = document.getElementById('deletePath').value;
+			try {
+				const response = await fetch(path, { method: 'DELETE' });
+				await displayResponse(response, 'deleteResponse');
+			} catch (error) {
+				document.getElementById('deleteResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		async function testCGI() {
+			const script = document.getElementById('cgiScript').value;
+			try {
+				const response = await fetch(script);
+				await displayResponse(response, 'cgiResponse');
+			} catch (error) {
+				document.getElementById('cgiResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+
+		async function testRedirect() {
+			try {
+				const response = await fetch('/old-page');
+				await displayResponse(response, 'redirectResponse');
+			} catch (error) {
+				document.getElementById('redirectResponse').innerHTML = `Erreur: ${error.message}`;
+			}
+		}
+	</script>
 </body>
-</html> 
+</html>

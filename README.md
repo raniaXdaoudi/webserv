@@ -1,6 +1,6 @@
 # webserv
 
-A standards-compliant HTTP/1.1 server implemented in C++98. This is a group project part of the 42 school curriculum.
+A standards-compliant HTTP/1.1 server implemented in C++98. This project is part of the 42 school curriculum.
 
 ## Description
 
@@ -19,7 +19,7 @@ The server implements:
 - HTTP/1.1 request handling (GET, POST, DELETE)
 - Multiple virtual servers configuration
 - Configuration file management
-- Non-blocking server with select/poll/epoll
+- Non-blocking server with select
 - CGI script execution
 - File upload handling
 - Standard HTTP error management
@@ -50,7 +50,7 @@ make
 
 Example:
 ```bash
-./webserv conf/default.conf
+./webserv config_files/default.conf
 ```
 
 ## Configuration
@@ -65,7 +65,7 @@ server {
 
     location / {
         index index.html;
-        allowed_methods GET POST;
+        allowed_methods GET POST DELETE;
     }
 
     location /uploads {
@@ -74,7 +74,7 @@ server {
     }
 
     location *.php {
-        fastcgi_pass unix:/var/run/php/php-fpm.sock;
+        cgi_pass /usr/bin/php-cgi;
     }
 }
 ```
@@ -120,14 +120,8 @@ The project includes a test suite to verify:
 - CGI script compatibility
 
 ## Authors
-This is a group project developed by:
+This project was developed by:
 - Rania (radaoudi)
-- Tamsi (tbesson)
 
 ## License
 This project is part of the 42 school curriculum. Please refer to 42's policies regarding code usage and distribution.
-
-## Acknowledgments
-- 42 school for providing project requirements and framework
-- HTTP/1.1 RFC documentation
-- Network programming documentation and resources

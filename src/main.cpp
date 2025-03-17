@@ -1,34 +1,52 @@
-#include "Server.hpp"
-#include "Config.hpp"
-#include <cstdlib>
-#include <vector>
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.cpp                                           :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: rania <rania@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/01/31 12:13:13 by rania             #+#    #+#             */
+/*   Updated: 2025/03/17 11:24:36 by rania            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 
-int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " <config_file>" << std::endl;
-        return 1;
-    }
+#include <iostream>
+#include "../include/Server.hpp"
+#include "../include/ConfigParser.hpp"
+#include <signal.h>
+#include "../include/Logger.hpp"
 
-    Config config;
-    if (!config.parse(argv[1])) {
-        std::cerr << "Erreur lors du chargement du fichier de configuration" << std::endl;
-        return 1;
-    }
+void sigHandler(int) {
+	if (Server::getInstance()) {
+		Server::getInstance()->stop();
+	}
+}
 
-    const std::vector<ServerConfig>& servers = config.getServers();
-    if (servers.empty()) {
-        std::cerr << "Aucun serveur configuré" << std::endl;
-        return 1;
-    }
+int main(int argc, char* argv[]) {
+	if (argc != 2) {
+		std::cerr << "Usage: " << argv[0] << " <config_file>" << std::endl;
+		return 1;
+	}
 
-    // Pour l'instant, on ne gère que le premier serveur configuré
-    Server server(servers[0]);
-    
-    if (!server.init()) {
-        std::cerr << "Échec de l'initialisation du serveur" << std::endl;
-        return 1;
-    }
+	try {
+		ConfigParser config;
+		config.parse(argv[1]);
 
-    server.run();
-    return 0;
-} 
+		signal(SIGINT, sigHandler);
+		signal(SIGTERM, sigHandler);
+
+
+		Logger::init();
+
+		Server::createInstance(config);
+		Server::getInstance()->start();
+
+
+		Logger::close();
+	} catch (const std::exception& e) {
+		std::cerr << "Error: " << e.what() << std::endl;
+		return 1;
+	}
+
+	return 0;
+}

@@ -1,29 +1,65 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: rania <rania@student.42.fr>                +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2025/01/31 12:13:00 by rania             #+#    #+#              #
+#    Updated: 2025/03/03 16:49:05 by rania            ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+# Nom de l'exécutable
 NAME = webserv
 
+# Compilateur et flags
 CXX = c++
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -I./include
+CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -g3 -I$(INCDIR)
 
-SRC_DIR = src
-OBJ_DIR = obj
+# Dossiers
+SRCDIR = src
+OBJDIR = obj
+INCDIR = include
 
-SRCS = $(wildcard $(SRC_DIR)/*.cpp)
-OBJS = $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+# Fichiers sources de départ (on ajoutera les autres plus tard)
+SRCS = $(SRCDIR)/main.cpp \
+		$(SRCDIR)/Server.cpp \
+		$(SRCDIR)/Request.cpp \
+		$(SRCDIR)/Response.cpp \
+		$(SRCDIR)/ConfigParser.cpp \
+		$(SRCDIR)/Utils.cpp \
+		$(SRCDIR)/Connection.cpp \
+		$(SRCDIR)/Route.cpp \
+		$(SRCDIR)/Logger.cpp
 
+# Fichiers objets (on changera .cpp en .o)
+OBJS = $(SRCS:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+
+# Règle principale
 all: $(NAME)
 
-$(NAME): $(OBJS)
-	$(CXX) $(OBJS) -o $(NAME)
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(OBJ_DIR)
+# Compilation des objets
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-clean:
-	rm -rf $(OBJ_DIR)
+# Création du dossier obj si nécessaire
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
+# Création de l'exécutable
+$(NAME): $(OBJS)
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+
+# Nettoyage des fichiers objets
+clean:
+	rm -rf $(OBJDIR)
+
+# Nettoyage complet
 fclean: clean
 	rm -f $(NAME)
 
+# Recompilation complète
 re: fclean all
 
-.PHONY: all clean fclean re 
+.PHONY: all clean fclean re
